@@ -114,6 +114,73 @@ export function generarTransiciones(alphabet) {
   return { transitions, marked };
 }
 
+export function generarTransicionesMulticinta(alphabet) {
+  const transitions = {};
+  
+  function addTransition(state, sym1, sym2, write1, move1, write2, move2, nextState) {
+    transitions[`${state},${sym1},${sym2}`] = [write1, move1, write2, move2, nextState];
+  }
+
+  for (const char of alphabet) {
+    addTransition('q0', char, '', char, 'R', '1', 'R', `q_count_first_${char}`);
+  }
+  addTransition('q0', '', '', '', 'R', '', 'R', 'RECHAZAR');
+
+  const getSubsets = (arr) => {
+    const res = [[]];
+    for (const el of arr) {
+      const len = res.length;
+      for (let i = 0; i < len; i++) {
+        res.push([...res[i], el]);
+      }
+    }
+    return res;
+  };
+
+  const allSubsets = getSubsets(alphabet);
+
+  for (const X of alphabet) {
+    addTransition(`q_count_first_${X}`, X, '', X, 'R', '1', 'R', `q_count_first_${X}`);
+
+    for (const Y of alphabet) {
+      if (Y === X) continue;
+      addTransition(`q_count_first_${X}`, Y, '', Y, 'S', '', 'L', `q_match_L_${Y}_${X}`);
+    }
+
+    addTransition(`q_count_first_${X}`, '', '', '', 'S', '', 'S', 'ACEPTAR');
+  }
+
+  for (const X of alphabet) {
+    for (const subset of allSubsets) {
+      if (subset.includes(X)) continue;
+      const F = [...subset].sort().join('');
+
+      addTransition(`q_match_L_${X}_${F}`, X, '1', X, 'R', '1', 'L', `q_match_L_${X}_${F}`);
+
+      for (const Y of alphabet) {
+        if (Y === X || subset.includes(Y)) continue;
+        const nextF = [...subset, X].sort().join('');
+        addTransition(`q_match_L_${X}_${F}`, Y, '', Y, 'S', '', 'R', `q_match_R_${Y}_${nextF}`);
+      }
+
+      addTransition(`q_match_L_${X}_${F}`, '', '', '', 'S', '', 'S', 'ACEPTAR');
+
+      addTransition(`q_match_R_${X}_${F}`, X, '1', X, 'R', '1', 'R', `q_match_R_${X}_${F}`);
+
+      for (const Y of alphabet) {
+        if (Y === X || subset.includes(Y)) continue;
+        const nextF = [...subset, X].sort().join('');
+        addTransition(`q_match_R_${X}_${F}`, Y, '', Y, 'S', '', 'L', `q_match_L_${Y}_${nextF}`);
+      }
+
+      addTransition(`q_match_R_${X}_${F}`, '', '', '', 'S', '', 'S', 'ACEPTAR');
+    }
+  }
+
+  return { transitions };
+}
+
 const defaultAlphabet = ['a', 'b', 'c', 'd'];
 const { transitions: defaultTransitions } = generarTransiciones(defaultAlphabet);
 export const TRANSICIONES = defaultTransitions;
+
