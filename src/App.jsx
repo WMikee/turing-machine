@@ -3,192 +3,33 @@ import { useTuringMachine } from "./hooks/useTuringMachine";
 import { useMultiTapeTuringMachine } from "./hooks/useMultiTapeTuringMachine";
 import TapeDisplay from "./components/TapeDisplay";
 import MultiTapeDisplay from "./components/MultiTapeDisplay";
+import AutomatonGraph from "./components/AutomatonGraph";
+import {
+  traducirEstado,
+  traducirRegla,
+  traducirReglaMulticinta,
+  traducirTransicionCorta,
+  traducirEstadoCorto,
+} from "./translators";
+import { TURING_MACHINES_MONOCINTA } from "./constants/turingConstants";
 
-const traducirEstado = (est) => {
-  if (est === "q0") return "Iniciando escaneo básico...";
-  if (est.startsWith("q_scan_")) {
-    const parts = est.split("_");
-    const activeBlock = parts[2] || "?";
-    return `Revisando orden (Grupo activo: '${activeBlock}')`;
-  }
-  if (est === "q_go_left") return "Regresando cabezal al extremo izquierdo...";
-  if (est === "q_match_start") return "Iniciando nueva ronda de conteo...";
-  if (est.startsWith("q_mark_block1_")) {
-    const char = est.replace("q_mark_block1_", "");
-    return `Buscando la siguiente '${char}' sin contar en el primer grupo`;
-  }
-  if (est === "q_check_all_marked")
-    return "Verificando que todos los grupos estén completos...";
-  if (est.startsWith("q_skip_block_")) {
-    const char = est.replace("q_skip_block_", "");
-    return `Saltando letras del grupo '${char}'`;
-  }
-  if (est.startsWith("q_mark_block_")) {
-    const char = est.replace("q_mark_block_", "");
-    return `Buscando la siguiente '${char}' sin contar en su grupo`;
-  }
 
-  if (est.startsWith("q_count_first_")) {
-    const char = est.replace("q_count_first_", "");
-    return `Contando el primer bloque (Grupo activo: '${char}'). Escribiendo en Cinta 2.`;
-  }
-  if (est.startsWith("q_match_L_")) {
-    const parts = est.split("_");
-    const activeBlock = parts[3] || "?";
-    return `Comparando bloque '${activeBlock}' moviendo Cinta 2 a la izquierda`;
-  }
-  if (est.startsWith("q_match_R_")) {
-    const parts = est.split("_");
-    const activeBlock = parts[3] || "?";
-    return `Comparando bloque '${activeBlock}' moviendo Cinta 2 a la derecha`;
-  }
 
-  if (est === "ACEPTAR") return "¡Cadena VÁLIDA y Aceptada!";
-  if (est === "RECHAZAR") return "Cadena RECHAZADA";
-  return est;
-};
 
-const traducirRegla = (est, symb, regl) => {
-  if (!regl) return "";
-  const [escribir, mover, nuevoEstado] = regl;
-  const dir = mover === "R" ? "derecha" : "izquierda";
-
-  const symLabel = symb === "" ? "celda vacía (_)" : `'${symb}'`;
-  const escLabel = escribir === "" ? "celda vacía (_)" : `'${escribir}'`;
-
-  let accion = `Leo ${symLabel}, escribo ${escLabel}, muevo el cabezal a la ${dir}`;
-
-  if (est === "q0") {
-    return `${accion} para comenzar a escanear el grupo de '${symb}'.`;
-  }
-  if (est.startsWith("q_scan_")) {
-    if (symb === escribir && nuevoEstado === est) {
-      return `${accion} para continuar revisando el grupo de '${symb}'.`;
-    }
-    if (nuevoEstado === "RECHAZAR") {
-      return `¡Letra '${symb}' fuera de lugar detectada! Rechazo la cadena inmediatamente.`;
-    }
-    if (nuevoEstado === "q_go_left") {
-      return `Fin de la cadena alcanzado de forma correcta. ${accion} para regresar al inicio.`;
-    }
-    const currentGroup = est.split("_")[2];
-    const nextChar = nuevoEstado.split("_")[2];
-    return `Termina el grupo de '${currentGroup}' y empieza el de '${nextChar}'. ${accion}.`;
-  }
-  if (est === "q_go_left") {
-    if (nuevoEstado === "q_match_start") {
-      return `Llegué al extremo izquierdo. ${accion} para iniciar el conteo.`;
-    }
-    return `Regresando: ${accion}.`;
-  }
-  if (est === "q_match_start") {
-    if (nuevoEstado === "ACEPTAR") {
-      return `¡Todo está perfectamente contado! Acepto la cadena.`;
-    }
-    return `Encuentro el inicio. ${accion} para contar la primera '${symb}' (marcando como '${escribir}').`;
-  }
-  if (est.startsWith("q_mark_block1_")) {
-    if (nuevoEstado === "q_check_all_marked") {
-      return `El primer grupo está totalmente contado. ${accion} para verificar los demás grupos.`;
-    }
-    if (symb === escribir) {
-      return `Sigo buscando en el primer grupo: ${accion}.`;
-    }
-    return `Encuentro una '${symb}' sin contar. La cuento (escribo '${escribir}') y ${accion}.`;
-  }
-  if (est === "q_check_all_marked") {
-    if (nuevoEstado === "ACEPTAR") {
-      return `¡Verificación completada! Todas las letras están contadas. Acepto la cadena.`;
-    }
-    return `Verificando: ${accion}.`;
-  }
-  if (est.startsWith("q_skip_block_")) {
-    if (nuevoEstado === "q_go_left") {
-      return `Ronda de conteo terminada con éxito. ${accion} para regresar y contar de nuevo.`;
-    }
-    if (nuevoEstado.startsWith("q_mark_block_")) {
-      return `Paso al grupo de las '${nuevoEstado.replace("q_mark_block_", "")}'. ${accion}.`;
-    }
-    if (nuevoEstado.startsWith("q_skip_block_") && nuevoEstado !== est) {
-      return `Salto al grupo de las '${nuevoEstado.replace("q_skip_block_", "")}'. ${accion}.`;
-    }
-    return `Saltando letras del grupo actual: ${accion}.`;
-  }
-  if (est.startsWith("q_mark_block_")) {
-    if (symb === escribir) {
-      return `Buscando en este grupo: ${accion}.`;
-    }
-    return `Encuentro una '${symb}' sin contar en su grupo. La cuento (escribo '${escribir}') y ${accion}.`;
-  }
-
-  return `${accion} y cambio al estado ${nuevoEstado}.`;
-};
-
-const traducirReglaMulticinta = (est, sym1, sym2, regl) => {
-  if (!regl) return "";
-  const [write1, move1, write2, move2, nuevoEstado] = regl;
-  const dir1 =
-    move1 === "R" ? "derecha" : move1 === "L" ? "izquierda" : "mantengo";
-  const dir2 =
-    move2 === "R" ? "derecha" : move2 === "L" ? "izquierda" : "mantengo";
-
-  const sym1Label = sym1 === "" ? "celda vacía (_)" : `'${sym1}'`;
-  const sym2Label = sym2 === "" ? "celda vacía (_)" : `'${sym2}'`;
-  const esc1Label = write1 === "" ? "celda vacía (_)" : `'${write1}'`;
-  const esc2Label = write2 === "" ? "celda vacía (_)" : `'${write2}'`;
-
-  let accion = `Cinta 1: leo ${sym1Label}, escribo ${esc1Label}, muevo a la ${dir1}. Cinta 2: leo ${sym2Label}, escribo ${esc2Label}, muevo a la ${dir2}`;
-
-  if (nuevoEstado === "ACEPTAR") {
-    return `${accion}. ¡La cadena ha sido completamente verificada y coincide perfectamente! Acepto la cadena.`;
-  }
-  if (nuevoEstado === "RECHAZAR") {
-    return `${accion}. ¡Inconsistencia o desbalance de bloques detectado! Rechazo la cadena.`;
-  }
-  if (est === "q0") {
-    return `${accion} para comenzar a contar el primer bloque de '${sym1}'.`;
-  }
-  if (est.startsWith("q_count_first_")) {
-    if (nuevoEstado.startsWith("q_match_L_")) {
-      const nextChar = nuevoEstado.split("_")[3];
-      return `Terminó el primer bloque. Empieza el bloque de '${nextChar}'. ${accion} para iniciar la comparación.`;
-    }
-    return `Seguimos contando el primer bloque: ${accion}.`;
-  }
-  if (est.startsWith("q_match_L_") || est.startsWith("q_match_R_")) {
-    const currentBlock = est.split("_")[3];
-    if (
-      nuevoEstado.startsWith("q_match_L_") ||
-      nuevoEstado.startsWith("q_match_R_")
-    ) {
-      const nextBlock = nuevoEstado.split("_")[3];
-      if (currentBlock !== nextBlock) {
-        return `Bloque '${currentBlock}' completado correctamente. Cambiamos al bloque '${nextBlock}'. ${accion}.`;
-      }
-    }
-    return `Comparando el bloque de '${currentBlock}' contra el contador de la Cinta 2: ${accion}.`;
-  }
-
-  return `${accion} y cambio al estado ${nuevoEstado}.`;
-};
 
 export default function TuringSimple() {
-  const [entrada, setEntrada] = useState("aaabbbccc");
+  const [machineId, setMachineId] = useState("abc");
+  const monoMachine = TURING_MACHINES_MONOCINTA[machineId];
+
+  const [entrada, setEntrada] = useState(monoMachine.exampleInput);
   const [modo, setModo] = useState("monocinta");
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(700);
 
-  const tmMonocinta = useTuringMachine([
-    "a",
-    "a",
-    "a",
-    "b",
-    "b",
-    "b",
-    "c",
-    "c",
-    "c",
-  ]);
+  const tmMonocinta = useTuringMachine(
+    monoMachine.exampleInput.split(""),
+    monoMachine
+  );
   const tmMulticinta = useMultiTapeTuringMachine([
     "a",
     "a",
@@ -206,6 +47,15 @@ export default function TuringSimple() {
 
   const tableContainerRef = useRef(null);
   const activeRowRef = useRef(null);
+
+  useEffect(() => {
+    // Cuando cambiamos de maquina, reseteamos entrada y estado.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsPlaying(false);
+    const nextInput = monoMachine.exampleInput;
+    setEntrada(nextInput);
+    tmMonocinta.cargarCinta(nextInput);
+  }, [machineId]);
 
   useEffect(() => {
     let timer = null;
@@ -310,7 +160,9 @@ export default function TuringSimple() {
             color: "var(--text-h)",
           }}
         >
-          Contador de Letras
+          {modo === "monocinta"
+            ? `Maquina de Turing: ${monoMachine.displayName}`
+            : "Maquina de Turing (Multicinta)"}
         </h1>
         <h3
           style={{
@@ -321,7 +173,7 @@ export default function TuringSimple() {
             opacity: 0.8,
           }}
         >
-          Simulador de Máquina de Turing (Monocinta vs Multicinta)
+          Simulador de Máquina de Turing con Visualización de Autómata Activo
         </h3>
 
         <div
@@ -358,6 +210,7 @@ export default function TuringSimple() {
             onClick={() => {
               setModo("multicinta");
               setIsPlaying(false);
+              setMachineId("abc");
             }}
             style={{
               padding: "10px 20px",
@@ -394,31 +247,17 @@ export default function TuringSimple() {
         >
           {modo === "monocinta" ? (
             <>
-              <strong>¿Cómo funciona el enfoque Monocinta? (O(n²))</strong>
-              <ul
-                style={{
-                  margin: "8px 0 0",
-                  paddingLeft: "20px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
-                }}
-              >
-                <li>Verifica que los símbolos estén agrupados.</li>
-                <li>
-                  Va de un lado a otro de la cinta, marcando exactamente un
-                  símbolo de cada bloque en cada pasada para comparar sus
-                  longitudes.
-                </li>
-                <li>
-                  Requiere muchas iteraciones de ida y vuelta sobre la cinta
-                  física, lo que hace el proceso lento.
-                </li>
-              </ul>
+              <strong>{monoMachine.displayName}</strong>
+              <div style={{ marginTop: "8px", color: "var(--text)" }}>
+                {monoMachine.inputHint}
+              </div>
+              <div style={{ marginTop: "6px", color: "var(--text)", opacity: 0.9 }}>
+                El autómata resalta el estado activo y la transicion δ que se aplica.
+              </div>
             </>
           ) : (
             <>
-              <strong>¿Cómo funciona el enfoque Multicinta? (O(n))</strong>
+              <strong>Máquina de Turing Multicinta para aⁿbⁿcⁿ</strong>
               <ul
                 style={{
                   margin: "8px 0 0",
@@ -429,20 +268,25 @@ export default function TuringSimple() {
                 }}
               >
                 <li>
-                  <strong>Cinta 1</strong> contiene la entrada original.{" "}
-                  <strong>Cinta 2</strong> actúa como contador/memoria de
-                  trabajo.
+                  <strong>Cinta 1</strong> almacena la entrada.{" "}
+                  <strong>Cinta 2</strong> actúa como contador auxiliar en
+                  tiempo lineal.
                 </li>
                 <li>
-                  En la primera pasada, cuenta la longitud del primer bloque
-                  escribiendo un <code>1</code> en la Cinta 2 por cada letra
-                  leída.
+                  En <code>Contar_A</code>, cuenta todas las <code>a</code>'s
+                  consecutivas de Cinta 1, escribiendo un <code>1</code> en
+                  Cinta 2 por cada una.
                 </li>
                 <li>
-                  Para los bloques siguientes, simplemente lee la Cinta 2 (en
-                  zig-zag hacia la izquierda y derecha) para verificar que
-                  tengan la misma cantidad de elementos sin tener que volver
-                  atrás en la entrada.
+                  En <code>Comparar_B</code>, valida que el bloque de{" "}
+                  <code>b</code>'s mida lo mismo que Cinta 2 (moviéndose a la
+                  izquierda en Cinta 2).
+                </li>
+                <li>
+                  En <code>Comparar_C</code>, valida el bloque de <code>c</code>
+                  's (moviéndose a la derecha en Cinta 2). Si la entrada y el
+                  contador terminan simultáneamente, pasa a <code>ACEPTAR</code>
+                  .
                 </li>
               </ul>
             </>
@@ -456,16 +300,17 @@ export default function TuringSimple() {
           flexDirection: "row",
           gap: "24px",
           width: "100%",
+          maxWidth: "1400px",
           alignItems: "stretch",
           justifyContent: "center",
           boxSizing: "border-box",
-          flexWrap: "nowrap",
+          flexWrap: "wrap",
           padding: "0 24px",
         }}
       >
         <div
           style={{
-            flex: "1 1 auto",
+            flex: "1 1 600px",
             minWidth: 0,
             background: "var(--social-bg)",
             border: "1px solid var(--border)",
@@ -479,6 +324,59 @@ export default function TuringSimple() {
           }}
         >
           <div>
+            {modo === "monocinta" && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "12px",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  marginBottom: "12px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: "bold",
+                    color: "var(--text)",
+                    opacity: 0.7,
+                  }}
+                >
+                  Máquina:
+                </span>
+                <select
+                  value={machineId}
+                  onChange={(e) => {
+                    setMachineId(e.target.value);
+                    setIsPlaying(false);
+                  }}
+                  style={{
+                    background: "var(--code-bg)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    padding: "10px 12px",
+                    color: "var(--text-h)",
+                    fontSize: "14px",
+                    fontFamily: "var(--mono)",
+                    fontWeight: "bold",
+                    outline: "none",
+                  }}
+                >
+                  {[
+                    "abc",
+                    "palindromo",
+                    "parentesis",
+                    "duplicar",
+                    "anbn",
+                  ].map((id) => (
+                    <option key={id} value={id}>
+                      {TURING_MACHINES_MONOCINTA[id].displayName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <span
               style={{
                 fontSize: "12px",
@@ -499,42 +397,15 @@ export default function TuringSimple() {
                 justifyContent: "flex-start",
               }}
             >
-              <button
-                onClick={() => aplicarPreset("aaabbbccc")}
-                style={presetStyle(true)}
-              >
-                aaabbbccc (Correcto - 3 de cada una)
-              </button>
-              <button
-                onClick={() => aplicarPreset("111222333")}
-                style={presetStyle(true)}
-              >
-                111222333 (Correcto - números)
-              </button>
-              <button
-                onClick={() => aplicarPreset("**##$$")}
-                style={presetStyle(true)}
-              >
-                **##$$ (Correcto - símbolos)
-              </button>
-              <button
-                onClick={() => aplicarPreset("bbaacc")}
-                style={presetStyle(true)}
-              >
-                bbaacc (Correcto - otro orden)
-              </button>
-              <button
-                onClick={() => aplicarPreset("112211")}
-                style={presetStyle(false)}
-              >
-                112211 (Incorrecto - números separados)
-              </button>
-              <button
-                onClick={() => aplicarPreset("aaabb")}
-                style={presetStyle(false)}
-              >
-                aaabb (Incorrecto - cantidades desiguales)
-              </button>
+              {monoMachine.presets.map((p) => (
+                <button
+                  key={p.value}
+                  onClick={() => aplicarPreset(p.value)}
+                  style={presetStyle(p.valid)}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -546,7 +417,9 @@ export default function TuringSimple() {
                 color: "var(--text-h)",
               }}
             >
-              Escribe tu propia secuencia de letras:
+              {modo === "monocinta"
+                ? `Escribe tu entrada para ${monoMachine.displayName}:`
+                : "Escribe tu entrada para la multicinta:"}
             </label>
             <input
               value={entrada}
@@ -565,13 +438,18 @@ export default function TuringSimple() {
                 outline: "none",
                 transition: "border-color 0.2s ease",
               }}
-              placeholder="Ejemplo: aabbcc o ddd"
+              placeholder={
+                modo === "monocinta"
+                  ? monoMachine.inputPlaceholder
+                  : "Ejemplo: aaabbbccc"
+              }
             />
             <small
               style={{ fontSize: "11px", color: "var(--text)", opacity: 0.7 }}
             >
-              Usa cualquier símbolo (letras, números, caracteres especiales,
-              etc.).
+              {modo === "monocinta"
+                ? monoMachine.inputHint
+                : "La máquina valida el lenguaje a^n b^n c^n usando dos cintas."}
             </small>
           </div>
 
@@ -772,9 +650,7 @@ export default function TuringSimple() {
             display: "flex",
             flexDirection: "column",
             gap: "12px",
-            position: "sticky",
-            top: "24px",
-            maxHeight: "calc(100vh - 48px)",
+            maxHeight: "650px",
             alignSelf: "flex-start",
           }}
         >
@@ -811,9 +687,9 @@ export default function TuringSimple() {
               flex: 1,
               minHeight: 0,
               overflowY: "auto",
-              border: "1px solid var(--border)",
+              border: "1px solid #2e303a",
               borderRadius: "8px",
-              background: "var(--bg)",
+              background: "#12131a",
             }}
           >
             <table
@@ -827,16 +703,15 @@ export default function TuringSimple() {
               <thead>
                 <tr
                   style={{
-                    background: "var(--code-bg)",
-                    borderBottom: "1px solid var(--border)",
-                    color: "var(--text-h)",
+                    background: "#1a1b23",
+                    borderBottom: "1px solid #2e303a",
+                    color: "#f3f4f6",
                     position: "sticky",
                     top: 0,
                     zIndex: 1,
                   }}
                 >
-                  <th style={thStyle}>Instrucción δ</th>
-                  <th style={thStyle}>Acción resultante</th>
+                  <th style={{ ...thStyle, textAlign: "left" }}>Definición y Explicación en Español</th>
                 </tr>
               </thead>
               <tbody>
@@ -849,30 +724,57 @@ export default function TuringSimple() {
                     const [esc, mov, nextEst] = regla;
                     const symbLabel = symb === "" ? "_" : symb;
                     const escLabel = esc === "" ? "_" : esc;
+                    const movEsp = mov === "R" ? "D" : mov === "L" ? "I" : "S";
 
                     return (
                       <tr
                         key={clave}
                         ref={esActiva ? activeRowRef : null}
                         style={{
-                          borderBottom: "1px solid var(--border)",
+                          borderBottom: "1px solid #2e303a",
                           background: esActiva
-                            ? "var(--accent-bg)"
+                            ? "rgba(170, 59, 255, 0.15)"
                             : "transparent",
                           fontWeight: esActiva ? "bold" : "normal",
-                          color: esActiva ? "var(--accent)" : "var(--text)",
+                          color: esActiva ? "var(--accent)" : "#9ca3af",
                           transition: "all 0.2s ease",
                         }}
                       >
-                        <td style={tdStyle}>
-                          <code>
-                            δ({est}, {symbLabel})
-                          </code>
-                        </td>
-                        <td style={tdStyle}>
-                          <code>
-                            = ({escLabel}, {mov}, {nextEst})
-                          </code>
+                        <td style={{ ...tdStyle, padding: "8px 12px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
+                              <code
+                                style={{
+                                  background: "transparent",
+                                  padding: 0,
+                                  color: esActiva ? "var(--accent)" : "#e5e7eb",
+                                }}
+                              >
+                                δ({traducirEstadoCorto(est)}, {symbLabel})
+                              </code>
+                              <code
+                                style={{
+                                  background: "transparent",
+                                  padding: 0,
+                                  color: esActiva ? "var(--accent)" : "#e5e7eb",
+                                }}
+                              >
+                                = ({escLabel}, {movEsp}, {traducirEstadoCorto(nextEst)})
+                              </code>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: esActiva ? "var(--accent)" : "var(--text)",
+                                opacity: esActiva ? 1 : 0.7,
+                                fontWeight: "normal",
+                                fontFamily: "var(--sans)",
+                                lineHeight: "1.3"
+                              }}
+                            >
+                              {traducirTransicionCorta(est, symb, regla, modo)}
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -883,31 +785,58 @@ export default function TuringSimple() {
                     const sym2Label = sym2 === "" ? "_" : sym2;
                     const esc1Label = esc1 === "" ? "_" : esc1;
                     const esc2Label = esc2 === "" ? "_" : esc2;
+                    const mov1Esp = mov1 === "R" ? "D" : mov1 === "L" ? "I" : "S";
+                    const mov2Esp = mov2 === "R" ? "D" : mov2 === "L" ? "I" : "S";
 
                     return (
                       <tr
                         key={clave}
                         ref={esActiva ? activeRowRef : null}
                         style={{
-                          borderBottom: "1px solid var(--border)",
+                          borderBottom: "1px solid #2e303a",
                           background: esActiva
-                            ? "var(--accent-bg)"
+                            ? "rgba(170, 59, 255, 0.15)"
                             : "transparent",
                           fontWeight: esActiva ? "bold" : "normal",
-                          color: esActiva ? "var(--accent)" : "var(--text)",
+                          color: esActiva ? "var(--accent)" : "#9ca3af",
                           transition: "all 0.2s ease",
                         }}
                       >
-                        <td style={tdStyle}>
-                          <code>
-                            δ({est}, {sym1Label}, {sym2Label})
-                          </code>
-                        </td>
-                        <td style={tdStyle}>
-                          <code>
-                            = ({esc1Label}, {mov1}, {esc2Label}, {mov2},{" "}
-                            {nextEst})
-                          </code>
+                        <td style={{ ...tdStyle, padding: "8px 12px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                              <code
+                                style={{
+                                  background: "transparent",
+                                  padding: 0,
+                                  color: esActiva ? "var(--accent)" : "#e5e7eb",
+                                }}
+                              >
+                                δ({traducirEstadoCorto(est)}, {sym1Label}, {sym2Label})
+                              </code>
+                              <code
+                                style={{
+                                  background: "transparent",
+                                  padding: 0,
+                                  color: esActiva ? "var(--accent)" : "#e5e7eb",
+                                }}
+                              >
+                                = ({esc1Label}, {mov1Esp}, {esc2Label}, {mov2Esp}, {traducirEstadoCorto(nextEst)})
+                              </code>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: esActiva ? "var(--accent)" : "var(--text)",
+                                opacity: esActiva ? 1 : 0.7,
+                                fontWeight: "normal",
+                                fontFamily: "var(--sans)",
+                                lineHeight: "1.3"
+                              }}
+                            >
+                              {traducirTransicionCorta(est, `${sym1},${sym2}`, regla, modo)}
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -918,6 +847,13 @@ export default function TuringSimple() {
           </div>
         </div>
       </div>
+
+      <AutomatonGraph
+        modo={modo}
+        estado={estado}
+        claveTransicion={claveTransicion}
+        monoTransitions={modo === "monocinta" ? transiciones : undefined}
+      />
 
       <div
         style={{
@@ -937,10 +873,10 @@ export default function TuringSimple() {
         {modo === "monocinta" ? (
           <>
             <div>
-              <strong>Símbolo′ / MAYÚSCULA</strong>: Procesados
+              <strong>X, Y, Z</strong>: Marcas de conteo (A, B, C procesadas)
             </div>
             <div>
-              <strong>Símbolo original</strong>: Por procesar
+              <strong>a, b, c</strong>: Letras por procesar
             </div>
           </>
         ) : (
@@ -949,12 +885,13 @@ export default function TuringSimple() {
               <strong>Cinta 1</strong>: Entrada y control
             </div>
             <div>
-              <strong>Cinta 2</strong>: Almacena conteo de bloques
+              <strong>Cinta 2</strong>: Memoria auxiliar (Conteo de bloques con
+              1's)
             </div>
           </>
         )}
         <div>
-          <strong>_</strong>: Celda Vacía
+          <strong>_ / vacío</strong>: Celda Vacía (Blank)
         </div>
       </div>
     </div>

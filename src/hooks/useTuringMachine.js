@@ -1,22 +1,27 @@
-import { useState, useMemo } from "react";
-import { generarTransiciones } from "../constants/turingConstants";
+import { useMemo, useState } from "react";
+import { TURING_MACHINES_MONOCINTA } from "../constants/turingConstants";
 
-const defaultCinta = ["a", "a", "b", "b"];
+const defaultMachine = TURING_MACHINES_MONOCINTA.abc;
 
-export function useTuringMachine(initialCinta = defaultCinta) {
-  const [cintaInicial, setCintaInicial] = useState(initialCinta);
-  const [cinta, setCinta] = useState(initialCinta);
+const defaultCintaFromMachine = (machine) =>
+  (machine?.exampleInput ? machine.exampleInput.split("") : [""]);
+
+export function useTuringMachine(initialCinta, machine = defaultMachine) {
+  const safeInitialCinta =
+    initialCinta ?? defaultCintaFromMachine(machine) ?? defaultCintaFromMachine(defaultMachine);
+
+  const [cintaInicial, setCintaInicial] = useState(safeInitialCinta);
+  const [cinta, setCinta] = useState(safeInitialCinta);
   const [cabezal, setCabezal] = useState(0);
-  const [estado, setEstado] = useState("q0");
+  const [estado, setEstado] = useState(machine.startState ?? defaultMachine.startState);
   const [mensaje, setMensaje] = useState("");
 
-  const transicionesInfo = useMemo(() => {
-    const alphabet = [...new Set(cintaInicial)].filter(sym => sym !== "");
-    return generarTransiciones(alphabet);
-  }, [cintaInicial]);
+  const transiciones = useMemo(
+    () => machine?.transitions ?? defaultMachine.transitions,
+    [machine]
+  );
 
-  const transiciones = transicionesInfo.transitions;
-  const marked = transicionesInfo.marked;
+  const marked = machine?.marked ?? defaultMachine.marked;
 
   const extenderCinta = (cintaActual, posicion) => {
     let nuevaCinta = [...cintaActual];
@@ -75,65 +80,31 @@ export function useTuringMachine(initialCinta = defaultCinta) {
     setCintaInicial(nuevaCinta);
     setCinta(nuevaCinta);
     setCabezal(0);
-    const ok = detectarBloquesIguales(texto);
-    setEstado("q0");
-    setMensaje(
-      ok
-        ? `Validación: ACEPTADA — ${texto}`
-        : `Validación: RECHAZADA — ${texto}`,
-    );
-  };
+    setEstado(machine?.startState ?? defaultMachine.startState);
 
-  const detectarBloquesIguales = (texto) => {
-    if (typeof texto !== "string") return false;
-    const s = texto.trim();
-    if (s.length === 0) return false;
-
-    const blocks = [];
-    let currentSymbol = s[0];
-    let currentLength = 1;
-
-    for (let i = 1; i < s.length; i++) {
-      if (s[i] === currentSymbol) {
-        currentLength++;
-      } else {
-        blocks.push({ symbol: currentSymbol, length: currentLength });
-        currentSymbol = s[i];
-        currentLength = 1;
-      }
+    if (typeof machine?.validateInput === "function") {
+      const ok = machine.validateInput(texto);
+      setMensaje(
+        ok
+          ? `Validación: ACEPTADA — ${texto}`
+          : `Validación: RECHAZADA — ${texto}`
+      );
+    } else {
+      setMensaje("");
     }
-    blocks.push({ symbol: currentSymbol, length: currentLength });
-
-
-
-    const seenSymbols = new Set();
-    for (const block of blocks) {
-      if (seenSymbols.has(block.symbol)) {
-        return false;
-      }
-      seenSymbols.add(block.symbol);
-    }
-
-    const expectedLength = blocks[0].length;
-    for (const block of blocks) {
-      if (block.length !== expectedLength) {
-        return false;
-      }
-    }
-
-    return true;
   };
 
   const validarEntrada = (entrada) => {
     const texto = entrada.trim();
-    const ok = detectarBloquesIguales(texto);
+    const ok =
+      typeof machine?.validateInput === "function"
+        ? machine.validateInput(texto)
+        : false;
     setCinta(texto === "" ? [""] : texto.split(""));
     setCabezal(0);
     setEstado(ok ? "ACEPTAR" : "RECHAZAR");
     setMensaje(
-      ok
-        ? "Cadena aceptada (bloques de igual longitud)"
-        : "Cadena rechazada (no cumple con bloques continuos de igual longitud)",
+      ok ? "Cadena aceptada" : "Cadena rechazada",
     );
     return ok;
   };
@@ -141,7 +112,7 @@ export function useTuringMachine(initialCinta = defaultCinta) {
   const reiniciar = () => {
     setCinta(cintaInicial);
     setCabezal(0);
-    setEstado("q0");
+    setEstado(machine?.startState ?? defaultMachine.startState);
     setMensaje("");
   };
 
@@ -153,7 +124,6 @@ export function useTuringMachine(initialCinta = defaultCinta) {
     darUnPaso,
     reiniciar,
     cargarCinta,
-    detectarBloquesIguales,
     validarEntrada,
     transiciones,
     marked,

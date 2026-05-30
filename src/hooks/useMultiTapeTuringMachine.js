@@ -1,21 +1,16 @@
-import { useState, useMemo } from "react";
-import { generarTransicionesMulticinta } from "../constants/turingConstants";
+import { useState } from "react";
+import { TRANSICIONES_MULTICINTA } from "../constants/turingConstants";
 
-const defaultCinta = ["a", "a", "b", "b"];
+const defaultCinta = ["a", "a", "a", "b", "b", "b", "c", "c", "c"];
 
 export function useMultiTapeTuringMachine(initialCinta = defaultCinta) {
   const [cintaInicial, setCintaInicial] = useState(initialCinta);
   const [cintas, setCintas] = useState([initialCinta, [""]]);
   const [cabezales, setCabezales] = useState([0, 0]);
-  const [estado, setEstado] = useState("q0");
+  const [estado, setEstado] = useState("Contar_A");
   const [mensaje, setMensaje] = useState("");
 
-  const transicionesInfo = useMemo(() => {
-    const alphabet = [...new Set(cintaInicial)].filter(sym => sym !== "");
-    return generarTransicionesMulticinta(alphabet);
-  }, [cintaInicial]);
-
-  const transiciones = transicionesInfo.transitions;
+  const transiciones = TRANSICIONES_MULTICINTA;
 
   const extenderCinta = (cintaActual, posicion) => {
     let nuevaCinta = [...cintaActual];
@@ -43,7 +38,6 @@ export function useMultiTapeTuringMachine(initialCinta = defaultCinta) {
     let pos1 = cabezales[0];
     let pos2 = cabezales[1];
 
-
     ({ nuevaCinta: tape1, nuevaPosicion: pos1 } = extenderCinta(tape1, pos1));
     ({ nuevaCinta: tape2, nuevaPosicion: pos2 } = extenderCinta(tape2, pos2));
 
@@ -60,7 +54,6 @@ export function useMultiTapeTuringMachine(initialCinta = defaultCinta) {
 
       let nextPos1 = pos1 + (move1 === "R" ? 1 : move1 === "L" ? -1 : 0);
       let nextPos2 = pos2 + (move2 === "R" ? 1 : move2 === "L" ? -1 : 0);
-
 
       ({ nuevaCinta: tape1, nuevaPosicion: nextPos1 } = extenderCinta(tape1, nextPos1));
       ({ nuevaCinta: tape2, nuevaPosicion: nextPos2 } = extenderCinta(tape2, nextPos2));
@@ -81,14 +74,14 @@ export function useMultiTapeTuringMachine(initialCinta = defaultCinta) {
     setCintaInicial(nuevaCinta);
     setCintas([nuevaCinta, [""]]);
     setCabezales([0, 0]);
-    setEstado("q0");
+    setEstado("Contar_A");
     setMensaje(`Nueva cinta cargada: ${texto}`);
   };
 
   const reiniciar = () => {
     setCintas([cintaInicial, [""]]);
     setCabezales([0, 0]);
-    setEstado("q0");
+    setEstado("Contar_A");
     setMensaje("");
   };
 
